@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoGo | Poker Chip Exchange</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+    <div id="app" class="container">
+        <!-- 1. Room Entry (Login / Create) -->
+        <div id="room-entry-view" class="animate-in stack" style="margin-top: 4rem;">
+            <div style="text-align: center; margin-bottom: 2.5rem;">
+                <h1 style="color: var(--primary); font-size: 3rem; margin-bottom: 0.5rem;">GoGo</h1>
+                <p class="text-muted">Enter a Room Code to Join or Create a Game</p>
+            </div>
+            
+            <div class="card stack" style="gap: 1.5rem; padding: 2rem;">
+                <div class="stack" style="gap: 0.5rem;">
+                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 600;">ROOM CODE</label>
+                    <input type="text" id="input-room-id" placeholder="e.g. FRIDAY_NIGHT" style="text-transform: uppercase;">
+                </div>
+                
+                <div class="stack" style="gap: 0.5rem;">
+                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 600;">DISPLAY NAME</label>
+                    <input type="text" id="input-player-name" placeholder="Your Name">
+                </div>
+                
+                <div class="stack" style="gap: 0.5rem;">
+                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 600;">4-DIGIT PIN</label>
+                    <input type="password" id="input-player-pin" maxlength="4" placeholder="••••" inputmode="numeric">
+                </div>
+
+                <button id="btn-join-room" class="btn btn-primary" style="padding: 1.25rem;">
+                    Enter Game
+                </button>
+            </div>
+            <p id="login-error" class="badge badge-rejected" style="display: none; margin-top: 1rem; text-align: center; padding: 1rem;"></p>
+        </div>
+
+        <!-- 2. Game View (Shared Container) -->
+        <div id="game-view" class="stack" style="display: none; width: 100%;">
+            <!-- Dynamic Header for Admins -->
+            <div id="admin-toggle-bar" class="row" style="display: none; background: rgba(255,255,255,0.03); padding: 0.5rem 1rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid var(--border);">
+                <span class="text-muted" style="font-size: 0.8rem; font-weight: 600;">ADMIN ACCESS</span>
+                <div class="row" style="gap: 0.5rem;">
+                    <button id="view-player" class="btn-xs btn-approve" style="opacity: 0.5;">Player</button>
+                    <button id="view-admin" class="btn-xs btn-reject" style="opacity: 0.5; background: var(--primary);">Admin Monitor</button>
+                </div>
+            </div>
+
+            <!-- Player Dashboard -->
+            <div id="player-view" class="stack animate-in" style="display: none;">
+                <header class="row" style="margin-bottom: 1rem;">
+                    <div class="row">
+                        <div style="background: var(--accent); padding: 8px; border-radius: 10px;">
+                            <i data-lucide="user" style="color: black; width: 20px; height: 20px;"></i>
+                        </div>
+                        <h1 id="player-name-display">Player</h1>
+                    </div>
+                    <div class="text-muted" style="font-weight: 500;">Room: <span id="display-room-id" style="color: var(--primary);"></span></div>
+                </header>
+
+                <div class="card stack" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(16, 185, 129, 0.1));">
+                    <span class="text-muted">Your Balance</span>
+                    <div style="font-size: 2.5rem; font-weight: 700; color: var(--accent);">
+                        <span id="player-balance">0</span> 
+                        <span style="font-size: 0.875rem; color: var(--text-muted); font-weight: 400;">Chips</span>
+                    </div>
+                    <div class="row" style="margin-top: 0.5rem;">
+                        <span class="text-muted">Total Buy: $<span id="player-total-buy">0</span></span>
+                        <span class="text-muted">Return: $<span id="player-total-return">0</span></span>
+                    </div>
+                </div>
+
+                <div class="card stack">
+                    <h2>Transaction</h2>
+                    <div id="player-chip-selection" class="stack" style="gap: 0;"></div>
+                    <div class="card" style="margin-top: 1rem; border-color: var(--primary); background: rgba(99, 102, 241, 0.05);">
+                        <div class="row">
+                            <span class="text-muted">Transaction Total</span>
+                            <h2 id="player-cart-total" style="margin-bottom: 0;">$0</h2>
+                        </div>
+                    </div>
+                    <div class="row" style="margin-top: 1rem;">
+                        <button id="btn-execute-buy" class="btn btn-primary" style="flex: 2; height: 60px;">Exchange (Buy)</button>
+                        <button id="btn-execute-sell" class="btn btn-sell" style="flex: 1; height: 60px;">Return</button>
+                    </div>
+                </div>
+
+                <div class="card stack">
+                    <h2>History</h2>
+                    <div id="player-history" class="stack" style="gap: 12px;"></div>
+                </div>
+            </div>
+
+            <!-- Admin Dashboard -->
+            <div id="admin-view" class="stack animate-in" style="display: none;">
+                <header class="row">
+                    <h1 style="color: var(--primary);">Admin Dashboard</h1>
+                    <button id="btn-settings" class="btn btn-primary" style="width: auto; padding: 0.5rem;"><i data-lucide="settings"></i></button>
+                </header>
+
+                <div id="admin-pending-section" class="card stack" style="border: 1px solid #eab308; background: rgba(234, 179, 8, 0.03);">
+                    <div class="row">
+                        <h2 style="color: #eab308;">Pending Approvals</h2>
+                        <div id="pending-count-badge" class="badge badge-pending">0</div>
+                    </div>
+                    <div id="admin-pending-list" class="stack" style="gap: 12px; margin-top: 0.5rem;"></div>
+                </div>
+
+                <div class="card stack">
+                    <div class="row">
+                        <h2>Reconciliation</h2>
+                        <div id="reconcile-status" class="badge">Checking...</div>
+                    </div>
+                    <div class="row">
+                        <div class="stack"><span class="text-muted">Total Buy-In</span><b style="font-size: 1.25rem;">$<span id="total-buy-in">0</span></b></div>
+                        <div class="stack" style="align-items: flex-end;"><span class="text-muted">Total Cash-Out</span><b style="font-size: 1.25rem;">$<span id="total-cash-out">0</span></b></div>
+                    </div>
+                    <button id="btn-finish-game" class="btn btn-primary" disabled style="margin-top: 1rem; background: var(--accent); color: black;">
+                        Finish Game (Books must balance)
+                    </button>
+                </div>
+
+                <div class="card stack">
+                    <h2>Player Status</h2>
+                    <div id="player-list" class="stack" style="gap: 2px;"></div>
+                </div>
+
+                <div class="card stack">
+                    <div class="row">
+                        <h2>Chip Pool</h2>
+                        <span class="text-muted">$<span id="admin-pool-value">0</span></span>
+                    </div>
+                    <div id="admin-pool-grid" class="pool-grid"></div>
+                </div>
+
+                <div class="card stack">
+                    <h2>Game Invite</h2>
+                    <div class="qr-container">
+                        <div id="qrcode"></div>
+                        <p id="invite-url" class="text-muted" style="font-size: 0.75rem; word-break: break-all;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Backdrop -->
+        <div id="modal-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; padding: 2rem;">
+            <div class="card stack" style="width: 100%; max-width: 400px; background: #161618;">
+                <h2 id="modal-title">Settings</h2>
+                <div id="modal-body" class="stack"></div>
+                <div class="row">
+                    <button id="modal-cancel" class="btn-reject" style="background:none; border:none; color:white; cursor:pointer;">Cancel</button>
+                    <button id="modal-ok" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

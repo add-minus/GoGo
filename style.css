@@ -1,0 +1,327 @@
+:root {
+  --bg: #0a0a0c;
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e2e2e7;
+  --text-muted: #a1a1aa;
+  --accent: #10b981; /* Emerald for profit/buy */
+  --accent-alt: #f43f5e; /* Rose for return/sell */
+  --primary: #6366f1; /* Indigo for branding */
+  --glass: blur(12px);
+  --radius: 16px;
+
+  /* Chip Colors */
+  --chip-black: #1a1a1a;
+  --chip-green: #10b981;
+  --chip-blue: #3b82f6;
+  --chip-red: #ef4444;
+  --chip-white: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Glass Card */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.container {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+/* Typography */
+h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
+.text-muted { color: var(--text-muted); font-size: 0.875rem; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-size: 0.9375rem;
+  width: 100%;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+
+.btn-buy {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.btn-buy:hover { background: rgba(16, 185, 129, 0.2); }
+
+.btn-sell {
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--accent-alt);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+}
+.btn-sell:hover { background: rgba(244, 63, 94, 0.2); }
+
+/* Inputs */
+input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  color: white;
+  width: 100%;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus { border-color: var(--primary); }
+
+/* Grid / List */
+.stack { display: flex; flex-direction: column; gap: 1rem; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+/* Dashboard Mini Cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-item {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+/* Denomination Picker Replaced by Counters */
+.chip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.chip-row:last-child { border-bottom: none; }
+
+.chip-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chip-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px rgba(0,0,0,0.5);
+}
+
+.chip-counter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.counter-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.counter-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--primary); }
+.counter-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.chip-val { font-weight: 700; width: 60px; }
+.count-display { font-weight: 700; font-size: 1.1rem; min-width: 24px; text-align: center; }
+
+/* Chip Color Utilities */
+.bg-black { background-color: var(--chip-black); }
+.bg-green { background-color: var(--chip-green); }
+.bg-blue { background-color: var(--chip-blue); }
+.bg-red { background-color: var(--chip-red); }
+.bg-white { background-color: var(--chip-white); color: black !important; }
+
+/* Admin Pool Grid */
+.pool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.75rem;
+}
+.pool-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  text-align: center;
+}
+.pool-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-bottom: 0.25rem; }
+
+/* Status Badges */
+.badge {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge-pending { background: rgba(234, 179, 8, 0.1); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.2); }
+.badge-approved { background: rgba(16, 185, 129, 0.1); color: var(--accent); border: 1px solid rgba(16, 185, 129, 0.2); }
+.badge-rejected { background: rgba(244, 63, 94, 0.1); color: var(--accent-alt); border: 1px solid rgba(244, 63, 94, 0.2); }
+
+/* Admin Request Card */
+.request-card {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* Join Screen List */
+.join-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+.join-item {
+  width: 100%;
+  padding: 1.25rem;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+.join-item:hover { border-color: var(--primary); background: rgba(255, 255, 255, 0.08); }
+
+/* Small buttons for list items */
+.btn-xs { padding: 4px 8px; font-size: 0.7rem; border-radius: 6px; cursor: pointer; }
+.btn-approve { background: var(--accent); color: black; border: none; font-weight: 600; opacity: 0.9; }
+.btn-approve:hover { opacity: 1; }
+.btn-reject { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+.btn-reject:hover { border-color: var(--accent-alt); color: var(--accent-alt); }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: fadeIn 0.4s ease-out; }
+
+/* QR Code Section */
+.qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+
+#qrcode img { display: block; }
+
+/* Admin Player Table */
+.player-list-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.player-list-item:last-child { border-bottom: none; }
+
+/* Room Entry Polish */
+#room-entry-view {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+}
+#room-entry-view::before {
+  content: "";
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+  z-index: -1;
+  animation: float 20s infinite linear;
+}
+@keyframes float { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+#room-entry-view .card {
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+}
+
+/* Admin Toggle Bar Polish */
+#admin-toggle-bar {
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px);
+  border-radius: 14px;
+  margin-bottom: 2rem;
+}
+#admin-toggle-bar button {
+  flex: 1;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reconciliation Pulse */
+.badge-approved {
+  animation: pulse-green 2s infinite;
+}
+@keyframes pulse-green {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Input Polishing */
+input::placeholder { color: rgba(255, 255, 255, 0.2); }
+input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
