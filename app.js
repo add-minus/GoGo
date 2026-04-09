@@ -25,6 +25,20 @@ try {
     console.error("Firebase init failed. Check your config!", e);
 }
 
+// Global Error Handler for debugging
+window.addEventListener("error", function (e) {
+    const errEl = document.createElement('div');
+    errEl.style.position = 'fixed';
+    errEl.style.top = '10px';
+    errEl.style.left = '10px';
+    errEl.style.background = 'red';
+    errEl.style.color = 'white';
+    errEl.style.padding = '10px';
+    errEl.style.zIndex = '9999';
+    errEl.innerText = 'JS Error: ' + e.message;
+    document.body.appendChild(errEl);
+});
+
 const CHIP_TYPES = {
     black: { val: 10, count: 200, color: 'black' },
     green: { val: 20, count: 100, color: 'green' },
@@ -39,6 +53,8 @@ let currentRoomId = null;
 let currentPlayerId = null;
 let isOwner = false;
 let playerCart = { black: 0, green: 0, blue: 0, red: 0, white: 0 };
+const PREDEFINED_NAMES = ['Add', 'Max', 'Tle'];
+let pendingIsOwner = false;
 
 // --- UI Components ---
 const views = {
@@ -51,13 +67,43 @@ const views = {
 
 // --- Core Logic ---
 
-async function joinOrCreateRoom() {
-    const roomId = document.getElementById('input-room-id').value.trim().toUpperCase();
-    const playerName = document.getElementById('input-player-name').value.trim();
-    const pin = document.getElementById('input-player-pin').value.trim();
+async function createNewRoom() {
+    const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+    currentRoomId = roomId;
+    pendingIsOwner = true;
 
-    if (!roomId || !playerName || pin.length !== 4) {
-        showError("Please fill in Room Code, Name, and 4-digit PIN.");
+    try {
+        const roomRef = doc(db, "games", roomId);
+        const newRoom = {
+            id: roomId,
+            owner: null,
+            pool: { black: 200, green: 100, blue: 100, red: 100, white: 100 },
+            players: {},
+            pendingTransactions: [],
+            transactions: [],
+            createdAt: Date.now()
+        };
+        
+        // Use a timeout to prevent silent hanging if Firebase is not reachable
+        await Promise.race([
+            setDoc(roomRef, newRoom),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Firebase connection timed out. Database might not exist or rules are blocking it.")), 5000))
+        ]);
+        
+        roomData = newRoom;
+
+        showProfileSetup();
+    } catch (e) {
+        showError("Connection error. Could not create room.");
+        console.error(e);
+    }
+}
+
+async function joinExistingRoom() {
+    const roomId = document.getElementById('input-room-id').value.trim().toUpperCase();
+
+    if (!roomId || roomId.length !== 6) {
+        showError("Please enter a valid 6-Digit Room Code.");
         return;
     }
 
@@ -66,44 +112,89 @@ async function joinOrCreateRoom() {
         const roomSnap = await getDoc(roomRef);
 
         if (!roomSnap.exists()) {
-            // --- Create Room ---
-            const newRoom = {
-                id: roomId,
-                owner: playerName,
-                pool: { black: 200, green: 100, blue: 100, red: 100, white: 100 },
-                players: { [playerName]: { name: playerName, pin, inventory: { black: 0, green: 0, blue: 0, red: 0, white: 0 }, history: [] } },
-                pendingTransactions: [],
-                transactions: [],
-                createdAt: Date.now()
-            };
-            await setDoc(roomRef, newRoom);
-            startSession(roomId, playerName, true);
-        } else {
-            // --- Join Room ---
-            const data = roomSnap.data();
-            const existingPlayer = data.players[playerName];
-
-            if (existingPlayer) {
-                if (existingPlayer.pin === pin) {
-                    startSession(roomId, playerName, data.owner === playerName);
-                } else {
-                    showError("Incorrect PIN for this player name.");
-                }
-            } else {
-                // New player in existing room
-                const updatedPlayers = { ...data.players };
-                updatedPlayers[playerName] = {
-                    name: playerName,
-                    pin,
-                    inventory: { black: 0, green: 0, blue: 0, red: 0, white: 0 },
-                    history: []
-                };
-                await updateDoc(roomRef, { players: updatedPlayers });
-                startSession(roomId, playerName, false);
-            }
+            showError("Room not found. Please check the code.");
+            return;
         }
+
+        roomData = roomSnap.data();
+        currentRoomId = roomId;
+        pendingIsOwner = false;
+
+        showProfileSetup();
     } catch (e) {
-        showError("Connection error. Is your Firebase configuration set?");
+        showError("Connection error while joining room.");
+        console.error(e);
+    }
+}
+
+function showProfileSetup() {
+    document.getElementById('room-selection-view').style.display = 'none';
+    document.getElementById('entry-subtitle').textContent = "Select your player profile";
+    document.getElementById('profile-setup-view').style.display = 'flex';
+
+    const container = document.getElementById('predefined-names');
+    container.innerHTML = '';
+
+    PREDEFINED_NAMES.forEach(name => {
+        const isTaken = !!roomData.players[name];
+
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.textContent = name;
+        btn.style.flex = '1';
+        btn.style.minWidth = '80px';
+
+        if (isTaken) {
+            btn.className = 'btn text-muted';
+            btn.style.background = 'rgba(255,255,255,0.05)';
+            btn.style.border = '1px solid rgba(255,255,255,0.1)';
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.5';
+        } else {
+            btn.style.border = '1px solid var(--border)';
+            btn.onclick = () => {
+                document.getElementById('input-player-name').value = name;
+                Array.from(container.children).forEach(c => c.style.borderColor = 'var(--border)');
+                btn.style.borderColor = 'var(--accent)';
+            };
+        }
+
+        container.appendChild(btn);
+    });
+}
+
+async function enterGame() {
+    const playerName = document.getElementById('input-player-name').value.trim();
+    if (!playerName) {
+        showError("Please select or type a name.");
+        return;
+    }
+
+    try {
+        const roomRef = doc(db, "games", currentRoomId);
+
+        if (pendingIsOwner) {
+            roomData.owner = playerName;
+        }
+
+        const existingPlayer = roomData.players[playerName];
+
+        if (!existingPlayer) {
+            roomData.players[playerName] = {
+                name: playerName,
+                inventory: { black: 0, green: 0, blue: 0, red: 0, white: 0 },
+                history: []
+            };
+        }
+
+        await updateDoc(roomRef, {
+            players: roomData.players,
+            ...(pendingIsOwner ? { owner: playerName } : {})
+        });
+
+        startSession(currentRoomId, playerName, pendingIsOwner || roomData.owner === playerName);
+    } catch (e) {
+        showError("Failed to enter the game.");
         console.error(e);
     }
 }
@@ -159,10 +250,15 @@ function updateUI() {
     if (views.player.style.display === 'flex') renderPlayer();
     if (views.admin.style.display === 'flex') renderAdmin();
 
-    // Sync Game Invite URL
+    // Sync Game Invite URL and trigger QR Code
     const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
     const inviteEl = document.getElementById('invite-url');
     if (inviteEl) inviteEl.textContent = inviteUrl;
+
+    const qrContainer = document.getElementById('qrcode');
+    if (qrContainer && qrContainer.innerHTML === '') {
+        new QRCode(qrContainer, { text: inviteUrl, width: 128, height: 128 });
+    }
 
     lucide.createIcons();
 }
@@ -358,7 +454,7 @@ window.resolveTx = async (tid, approve) => {
         pendingTransactions: newPending,
         players: updatedPlayers,
         pool: updatedPool,
-        transactions: [tx, ...roomData.transactions].slice(0, 50)
+        transactions: [tx, ...roomData.transactions]
     });
 };
 
@@ -387,7 +483,9 @@ function showError(msg) {
 }
 
 // --- Events ---
-document.getElementById('btn-join-room').addEventListener('click', joinOrCreateRoom);
+document.getElementById('btn-enter-game').addEventListener('click', enterGame);
+document.getElementById('btn-create-room').addEventListener('click', createNewRoom);
+document.getElementById('btn-join-room').addEventListener('click', joinExistingRoom);
 document.getElementById('view-player').addEventListener('click', () => switchMode('player'));
 document.getElementById('view-admin').addEventListener('click', () => switchMode('admin'));
 document.getElementById('btn-execute-buy').addEventListener('click', () => processTx('buy'));
