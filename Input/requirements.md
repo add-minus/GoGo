@@ -1,0 +1,1 @@
+Act as a Lead Systems Architect. Based on my requirement for a React/Python/Firebase Poker game, write a detailed Markdown file for the Antigravity agent. Include the data schema for Firebase (rooms, players, game state), the API endpoints for the Python backend, and the UI components for the React frontend.

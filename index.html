@@ -23,61 +23,54 @@
 
 <body>
     <div id="app" class="container">
-        <!-- 1. Room Entry (Login / Create) -->
+        <!-- 1. Room Entry Container -->
         <div id="room-entry-view" class="animate-in stack" style="margin-top: 4rem;">
             <div style="text-align: center; margin-bottom: 2.5rem;">
                 <h1 style="color: var(--primary); font-size: 3rem; margin-bottom: 0.5rem;">GoGo</h1>
-                <p id="entry-subtitle" class="text-muted">Join or create a room</p>
+                <p id="entry-subtitle" class="text-muted">Poker Chip Exchange</p>
             </div>
 
-            <div id="room-selection-view" class="card stack" style="gap: 1.5rem; padding: 2rem;">
-                <button id="btn-create-room" class="btn btn-primary"
-                    style="padding: 1.25rem; background: var(--accent); color: black;">
+            <!-- Login View -->
+            <div id="view-login" class="card stack" style="gap: 1.5rem; padding: 2rem; display: none;">
+                <h2 style="text-align: center;">Welcome</h2>
+                <p class="text-muted" style="text-align: center;">Sign in with Google to continue</p>
+                <button id="btn-google-login" class="btn btn-primary" style="height: 56px;">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/splitpanel/google.svg" width="20" style="filter: brightness(0) invert(1);">
+                    Sign in with Google
+                </button>
+            </div>
+
+            <!-- Profile Setup View -->
+            <div id="view-profile-setup" class="card stack" style="gap: 1.5rem; padding: 2rem; display: none;">
+                <h2 style="text-align: center;">Set Your Profile</h2>
+                <div class="stack" style="gap: 0.5rem;">
+                    <label class="text-muted">Display Name</label>
+                    <input type="text" id="setup-display-name" placeholder="How others see you" maxlength="20" style="height: 50px; font-size: 1.1rem; text-align: center;">
+                </div>
+                <button id="btn-save-profile" class="btn btn-primary" style="height: 50px;">Continue</button>
+            </div>
+
+            <!-- Room Selection View -->
+            <div id="view-room-selection" class="card stack" style="gap: 1.5rem; padding: 2rem; display: none;">
+                <button id="btn-create-room" class="btn btn-primary" style="padding: 1rem; background: var(--accent); color: black;">
                     Create New Room
                 </button>
 
-                <div class="row" style="justify-content: center; opacity: 0.5;">
+                <div class="row" style="justify-content: center; opacity: 0.3;">
                     <hr style="flex: 1; border-color: var(--border);">
                     <span style="padding: 0 1rem; font-size: 0.8rem;">OR</span>
                     <hr style="flex: 1; border-color: var(--border);">
                 </div>
 
-                <div class="stack" style="gap: 0.5rem;">
-                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 600;">JOIN EXISTING ROOM</label>
-                    <div class="row" style="gap: 0.5rem;">
-                        <input type="text" id="input-room-id" placeholder="6-Digit Code" maxlength="6" style="flex: 1; min-width: 150px; min-height: 50px; font-size: 1.25rem; text-align: center; letter-spacing: 2px;">
-                        <button id="btn-join-room" class="btn btn-primary" style="padding: 0 1.5rem;">
-                            Join
-                        </button>
-                    </div>
+                <div class="stack" style="gap: 1rem; margin-top: 0.5rem;">
+                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 700; text-align: center; letter-spacing: 0.05em;">JOIN EXISTING ROOM</label>
+                    <input type="text" id="input-room-id" placeholder="000 000" maxlength="6" 
+                        style="width: 100%; height: 80px; font-size: 2.5rem; text-align: center; letter-spacing: 8px; border: 2px solid var(--primary); border-radius: 16px; background: rgba(255,255,255,0.02); font-weight: 800;">
+                    <button id="btn-join-room" class="btn btn-primary" style="height: 60px; font-size: 1.25rem; border-radius: 12px;">Join Room</button>
                 </div>
             </div>
 
-            <div id="profile-setup-view" class="card stack" style="gap: 1.5rem; padding: 2rem; display: none;">
-                <div class="stack" style="gap: 0.5rem;">
-                    <label class="text-muted" style="font-size: 0.8rem; font-weight: 600;">SELECT PLAYER</label>
-                    <div id="predefined-names" class="row" style="gap: 0.5rem; flex-wrap: wrap;">
-                        <!-- Buttons injected dynamically -->
-                    </div>
-                </div>
-
-                <div class="row" style="justify-content: center; opacity: 0.5;">
-                    <hr style="flex: 1; border-color: var(--border);">
-                    <span style="padding: 0 1rem; font-size: 0.8rem;">OR NEW PLAYER</span>
-                    <hr style="flex: 1; border-color: var(--border);">
-                </div>
-
-                <div class="stack" style="gap: 0.5rem;">
-                    <input type="text" id="input-player-name" placeholder="Type your name">
-                </div>
-
-                <button id="btn-enter-game" class="btn btn-primary" style="padding: 1.25rem;">
-                    Enter Game
-                </button>
-            </div>
-
-            <p id="login-error" class="badge badge-rejected"
-                style="display: none; margin-top: 1rem; text-align: center; padding: 1rem;"></p>
+            <p id="login-error" class="text-muted" style="display: none; margin-top: 1rem; text-align: center; background: rgba(244, 63, 94, 0.1); padding: 1rem; border-radius: 12px; color: var(--accent-alt);"></p>
         </div>
 
         <!-- 2. Game View (Shared Container) -->
@@ -85,12 +78,9 @@
             <!-- Dynamic Header for Admins -->
             <div id="admin-toggle-bar" class="row"
                 style="display: none; background: rgba(255,255,255,0.03); padding: 0.5rem 1rem; border-radius: 12px; margin-bottom: 1rem; border: 1px solid var(--border);">
-                <span class="text-muted" style="font-size: 0.8rem; font-weight: 600;">ADMIN ACCESS</span>
-                <div class="row" style="gap: 0.5rem;">
-                    <button id="view-player" class="btn-xs btn-approve" style="opacity: 0.5;">Player</button>
-                    <button id="view-admin" class="btn-xs btn-reject"
-                        style="opacity: 0.5; background: var(--primary);">Admin Monitor</button>
-                </div>
+                <button id="view-player" class="btn">Player</button>
+                <button id="view-room" class="btn">Room Status</button>
+                <button id="view-admin" class="btn" style="display: none;">Approvals</button>
             </div>
 
             <!-- Player Dashboard -->
@@ -143,22 +133,23 @@
                 </div>
             </div>
 
-            <!-- Admin Dashboard -->
+            <!-- Admin/Approvals View -->
             <div id="admin-view" class="stack animate-in" style="display: none;">
                 <header class="row">
-                    <h1 style="color: var(--primary);">Admin Dashboard</h1>
+                    <h1 style="color: #eab308;">Pending Approvals</h1>
+                    <div id="pending-count-badge" class="badge badge-pending">0</div>
+                </header>
+
+                <div id="admin-pending-list" class="stack" style="gap: 12px; margin-top: 0.5rem;"></div>
+            </div>
+
+            <!-- Room Status View (Shared) -->
+            <div id="room-view" class="stack animate-in" style="display: none;">
+                <header class="row">
+                    <h1 style="color: var(--primary);">Room Status</h1>
                     <button id="btn-settings" class="btn btn-primary" style="width: auto; padding: 0.5rem;"><i
                             data-lucide="settings"></i></button>
                 </header>
-
-                <div id="admin-pending-section" class="card stack"
-                    style="border: 1px solid #eab308; background: rgba(234, 179, 8, 0.03);">
-                    <div class="row">
-                        <h2 style="color: #eab308;">Pending Approvals</h2>
-                        <div id="pending-count-badge" class="badge badge-pending">0</div>
-                    </div>
-                    <div id="admin-pending-list" class="stack" style="gap: 12px; margin-top: 0.5rem;"></div>
-                </div>
 
                 <div class="card stack">
                     <div class="row">
@@ -174,13 +165,20 @@
                     </div>
                     <button id="btn-finish-game" class="btn btn-primary" disabled
                         style="margin-top: 1rem; background: var(--accent); color: black;">
-                        Finish Game (Books must balance)
+                        Finish Game (Admin Only)
                     </button>
                 </div>
 
                 <div class="card stack">
                     <h2>Player Status</h2>
                     <div id="player-list" class="stack" style="gap: 2px;"></div>
+                </div>
+
+                <div class="card stack">
+                    <h2>Game History</h2>
+                    <div id="admin-game-history" class="stack" style="gap: 12px; max-height: 400px; overflow-y: auto;">
+                        <div class="text-muted" style="text-align: center; padding: 1rem;">No history yet</div>
+                    </div>
                 </div>
 
                 <div class="card stack">
@@ -191,12 +189,16 @@
                     <div id="admin-pool-grid" class="pool-grid"></div>
                 </div>
 
-                <div class="card stack">
+                <div class="card stack" style="align-items: center; text-align: center; gap: 1.5rem;">
                     <h2>Game Invite</h2>
-                    <div class="qr-container">
-                        <div id="qrcode"></div>
-                        <p id="invite-url" class="text-muted" style="font-size: 0.75rem; word-break: break-all;"></p>
+                    <div class="stack" style="gap: 0.5rem;">
+                        <span class="text-muted" style="text-transform: uppercase; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.1em;">Room Code</span>
+                        <div id="admin-room-code-display" style="font-size: 3.5rem; font-weight: 800; color: var(--primary); letter-spacing: 4px; line-height: 1;">------</div>
                     </div>
+                    <div class="qr-container" style="background: white; padding: 1rem; border-radius: 16px;">
+                        <div id="qrcode"></div>
+                    </div>
+                    <p id="invite-url" class="text-muted" style="font-size: 0.75rem; word-break: break-all; opacity: 0.6;"></p>
                 </div>
             </div>
         </div>
@@ -217,7 +219,7 @@
     </div>
 
     <!-- Scripts -->
-    <script type="module" src="app.js"></script>
+    <script type="module" src="app.js?v=2"></script>
 </body>
 
 </html>
