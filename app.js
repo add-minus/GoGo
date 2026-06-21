@@ -3,8 +3,8 @@
  */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc as fbDoc, setDoc as fbSetDoc, getDoc as fbGetDoc, onSnapshot as fbOnSnapshot, updateDoc as fbUpdateDoc, deleteDoc as fbDeleteDoc, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, signInWithPopup as fbSignInWithPopup, GoogleAuthProvider, onAuthStateChanged as fbOnAuthStateChanged, signOut as fbSignOut, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // --- STEP 1: PASTE YOUR FIREBASE CONFIG HERE ---
 // Get this from: Firebase Console > Project Settings > General > Your Apps > Config
@@ -17,12 +17,151 @@ const firebaseConfig = {
     appId: "1:355975442030:web:c68f171be218faf548007f"
 };
 
+const isMockMode = new URLSearchParams(window.location.search).get('mock') === 'true';
+
+// Mock DB store in localStorage
+const mockDb = {
+    listeners: {},
+    get(path) {
+        return JSON.parse(localStorage.getItem('gogo_mock_' + path) || 'null');
+    },
+    set(path, data) {
+        localStorage.setItem('gogo_mock_' + path, JSON.stringify(data));
+        this.trigger(path, data);
+    },
+    delete(path) {
+        localStorage.removeItem('gogo_mock_' + path);
+        this.trigger(path, null);
+    },
+    trigger(path, data) {
+        if (this.listeners[path]) {
+            this.listeners[path].forEach(cb => cb(data));
+        }
+    },
+    listen(path, cb) {
+        if (!this.listeners[path]) this.listeners[path] = [];
+        this.listeners[path].push(cb);
+        cb(this.get(path));
+        return () => {
+            this.listeners[path] = this.listeners[path].filter(x => x !== cb);
+        };
+    }
+};
+
+const doc = (db, collectionName, docId) => {
+    if (isMockMode) {
+        return { path: `${collectionName}/${docId}`, id: docId };
+    }
+    return fbDoc(db, collectionName, docId);
+};
+
+const setDoc = async (ref, data) => {
+    if (isMockMode) {
+        mockDb.set(ref.path, data);
+        return;
+    }
+    return fbSetDoc(ref, data);
+};
+
+const getDoc = async (ref) => {
+    if (isMockMode) {
+        const val = mockDb.get(ref.path);
+        return {
+            exists: () => val !== null,
+            data: () => val
+        };
+    }
+    return fbGetDoc(ref);
+};
+
+const updateDoc = async (ref, data) => {
+    if (isMockMode) {
+        const current = mockDb.get(ref.path) || {};
+        const updated = { ...current };
+        Object.keys(data).forEach(key => {
+            updated[key] = data[key];
+        });
+        mockDb.set(ref.path, updated);
+        return;
+    }
+    return fbUpdateDoc(ref, data);
+};
+
+const deleteDoc = async (ref) => {
+    if (isMockMode) {
+        mockDb.delete(ref.path);
+        return;
+    }
+    return fbDeleteDoc(ref);
+};
+
+const onSnapshot = (ref, callback) => {
+    if (isMockMode) {
+        return mockDb.listen(ref.path, (data) => {
+            callback({
+                exists: () => data !== null,
+                data: () => data
+            });
+        });
+    }
+    return fbOnSnapshot(ref, callback);
+};
+
+const signInWithPopup = (auth, provider) => {
+    if (isMockMode) {
+        const mockUser = {
+            uid: "mock-admin-uid",
+            displayName: "Mock Admin",
+            email: "mock-admin@example.com",
+            photoURL: "https://via.placeholder.com/36"
+        };
+        localStorage.setItem('gogo_mock_user', JSON.stringify(mockUser));
+        if (mockAuthStateListener) mockAuthStateListener(mockUser);
+        return Promise.resolve({ user: mockUser });
+    }
+    return fbSignInWithPopup(auth, provider);
+};
+
+const signOut = (auth) => {
+    if (isMockMode) {
+        localStorage.removeItem('gogo_mock_user');
+        if (mockAuthStateListener) mockAuthStateListener(null);
+        return Promise.resolve();
+    }
+    return fbSignOut(auth);
+};
+
+let mockAuthStateListener = null;
+const onAuthStateChanged = (auth, callback) => {
+    if (isMockMode) {
+        mockAuthStateListener = callback;
+        const savedUser = localStorage.getItem('gogo_mock_user');
+        setTimeout(() => {
+            if (savedUser) {
+                callback(JSON.parse(savedUser));
+            } else {
+                callback(null);
+            }
+        }, 0);
+        return () => { mockAuthStateListener = null; };
+    }
+    return fbOnAuthStateChanged(auth, callback);
+};
+
 // Initialize Firebase
 let app, db, auth;
+let currentUser = null; // Google Auth User
 try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('emulator') === 'true') {
+        connectAuthEmulator(auth, "http://127.0.0.1:9099");
+        connectFirestoreEmulator(db, "127.0.0.1", 8080);
+        console.log("Connected to Firebase Auth & Firestore Emulators");
+    }
     
     // Auth State Observer
     onAuthStateChanged(auth, async (user) => {
@@ -63,7 +202,7 @@ const CHIP_TYPES = {
 // --- State Management ---
 let roomData = null;
 let currentRoomId = null;
-let currentUser = null; // Google Auth User
+// let currentUser was moved up
 let currentPlayerId = null; // UID
 let isOwner = false;
 let playerCart = { black: 0, green: 0, blue: 0, red: 0, white: 0 };
@@ -187,9 +326,9 @@ async function enterGame() {
     }
 }
 
-function startSession(roomId, playerName, isRoomOwner) {
+function startSession(roomId, playerId, isRoomOwner) {
     currentRoomId = roomId;
-    currentPlayerId = playerName;
+    currentPlayerId = playerId;
     isOwner = isRoomOwner;
     
     // Update URL
@@ -236,21 +375,21 @@ function switchMode(mode) {
     views.roomStatus.style.display = 'none';
     views.admin.style.display = 'none';
     
-    // Reset button opacities
+    // Reset button active states
     ['view-player', 'view-room', 'view-admin'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.opacity = '0.5';
+        if (el) el.classList.remove('active-tab');
     });
 
     if (mode === 'admin') {
         views.admin.style.display = 'flex';
-        document.getElementById('view-admin').style.opacity = '1';
+        document.getElementById('view-admin').classList.add('active-tab');
     } else if (mode === 'room') {
         views.roomStatus.style.display = 'flex';
-        document.getElementById('view-room').style.opacity = '1';
+        document.getElementById('view-room').classList.add('active-tab');
     } else {
         views.player.style.display = 'flex';
-        document.getElementById('view-player').style.opacity = '1';
+        document.getElementById('view-player').classList.add('active-tab');
     }
     updateUI();
 }
@@ -283,8 +422,10 @@ async function checkUserProfile() {
 }
 
 async function saveProfile() {
-    const name = document.getElementById('setup-display-name').value.trim();
-    if (!name) return alert("Please enter a name");
+    const name = document.getElementById('setup-display-name').value;
+    if (!validateDisplayName(name)) return;
+    
+    const trimmed = name.trim();
     
     try {
         await setDoc(doc(db, "users", currentUser.uid), {
@@ -328,6 +469,16 @@ function showRoomSelection() {
 function updateUI() {
     if (!roomData) return;
 
+    const roomIdEl = document.getElementById('display-room-id');
+    if (roomIdEl) roomIdEl.textContent = currentRoomId;
+
+    if (currentUser) {
+        const avatarEl = document.getElementById('profile-avatar-display');
+        if (avatarEl) avatarEl.src = currentUser.photoURL || 'https://via.placeholder.com/36';
+        const dropdownUserNameEl = document.getElementById('dropdown-user-name');
+        if (dropdownUserNameEl) dropdownUserNameEl.textContent = currentUser.displayName || 'Player';
+    }
+
     // Show/Hide Approvals tab based on admin status
     document.getElementById('view-admin').style.display = isOwner ? 'block' : 'none';
     document.getElementById('btn-finish-game').style.display = isOwner ? 'block' : 'none';
@@ -354,7 +505,6 @@ function updateUI() {
 }
 
 function renderPlayer() {
-    document.getElementById('display-room-id').textContent = currentRoomId;
     
     const player = roomData.players[currentPlayerId];
     if (!player) {
@@ -380,7 +530,7 @@ function renderPlayer() {
         <div class="chip-row">
             <div class="chip-info">
                 <div class="chip-circle bg-${key}"></div>
-                <div class="chip-val">$${CHIP_TYPES[key].val}</div>
+                <div class="chip-val">${CHIP_TYPES[key].val} THB</div>
             </div>
             <div class="chip-counter">
                 <button class="counter-btn" onclick="window.updateCart('${key}', -1)">-</button>
@@ -391,11 +541,11 @@ function renderPlayer() {
     `).join('');
 
     const cartVal = Object.keys(playerCart).reduce((sum, k) => sum + (playerCart[k] * CHIP_TYPES[k].val), 0);
-    document.getElementById('player-cart-total').textContent = `$${cartVal.toLocaleString()}`;
+    document.getElementById('player-cart-total').textContent = `${cartVal.toLocaleString()} THB`;
 
     // Render History
     const historyEl = document.getElementById('player-history');
-    const myPending = roomData.pendingTransactions.filter(t => t.playerName === currentPlayerId);
+    const myPending = roomData.pendingTransactions.filter(t => t.playerId === currentPlayerId);
 
     if (myPending.length === 0 && player.history.length === 0) {
         historyEl.innerHTML = '<div class="text-muted" style="text-align: center; padding: 1rem;">No transactions yet.</div>';
@@ -403,12 +553,12 @@ function renderPlayer() {
         const pendingHtml = myPending.map(t => `
             <div class="stack animate-in" style="padding: 1rem; border: 1px solid #eab308; background: rgba(234, 179, 8, 0.05); border-radius: 12px; gap: 4px;">
                 <div class="row"><span class="badge badge-pending">PENDING</span> <button class="btn-xs btn-reject" onclick="window.cancelRequest('${t.id}')">Cancel</button></div>
-                <div class="row"><b>${t.type === 'buy' ? 'Buy chips' : 'Return chips'}</b> <b>$${t.totalVal}</b></div>
+                <div class="row"><b>${t.type === 'buy' ? 'Buy chips' : 'Return chips'}</b> <b>${t.totalVal} THB</b></div>
                 <div class="row" style="gap: 4px; flex-wrap: wrap; margin-top: 4px; justify-content: flex-start;">
                     ${Object.entries(t.chips || {}).filter(([k, v]) => v > 0).map(([k, v]) => `
                         <div class="row" style="gap: 4px; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border);">
                             <div class="chip-circle bg-${k}" style="width: 12px; height: 12px;"></div>
-                            <span style="font-size: 0.7rem; font-weight: 600;">$${CHIP_TYPES[k].val} x${v}</span>
+                            <span style="font-size: 0.7rem; font-weight: 600;">${CHIP_TYPES[k].val} THB x${v}</span>
                         </div>
                     `).join('')}
                 </div>
@@ -419,13 +569,13 @@ function renderPlayer() {
             <div class="stack" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border); gap: 2px;">
                 <div class="row">
                     <span>${h.type === 'buy' ? 'Exchange (Buy)' : 'Returned'}</span>
-                    <span style="font-weight: 700; color: ${h.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${h.type === 'buy' ? '-' : '+'}$${h.totalVal}</span>
+                    <span style="font-weight: 700; color: ${h.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${h.type === 'buy' ? '-' : '+'}${h.totalVal} THB</span>
                 </div>
                 <div class="row" style="gap: 4px; flex-wrap: wrap; margin-top: 2px; justify-content: flex-start;">
                     ${Object.entries(h.chips || {}).filter(([k, v]) => v > 0).map(([k, v]) => `
                         <div class="row" style="gap: 4px; background: rgba(255,255,255,0.03); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);">
                             <div class="chip-circle bg-${k}" style="width: 10px; height: 10px;"></div>
-                            <span style="font-size: 0.65rem;">$${CHIP_TYPES[k].val} x${v}</span>
+                            <span style="font-size: 0.65rem;">${CHIP_TYPES[k].val} THB x${v}</span>
                         </div>
                     `).join('')}
                     <span class="badge badge-${h.status}" style="margin-left: auto; font-size: 0.6rem;">${h.status}</span>
@@ -447,7 +597,7 @@ function renderApprovals() {
         pendingEl.innerHTML = '<div class="text-muted" style="text-align: center; padding: 1rem;">No pending approvals</div>';
     } else {
         pendingEl.innerHTML = roomData.pendingTransactions.map(t => {
-            const requester = roomData.players[t.playerName] || { name: 'Unknown' };
+            const requester = roomData.players[t.playerId] || { name: 'Unknown' };
             return `
                 <div class="request-card stack" style="gap: 8px;">
                     <div class="row" style="gap: 12px;">
@@ -459,12 +609,12 @@ function renderApprovals() {
                         ${Object.entries(t.chips || {}).filter(([k, v]) => v > 0).map(([k, v]) => `
                             <div class="row" style="gap: 4px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border);">
                                 <div class="chip-circle bg-${k}" style="width: 14px; height: 14px;"></div>
-                                <span style="font-size: 0.8rem; font-weight: 700;">$${CHIP_TYPES[k].val} x${v}</span>
+                                <span style="font-size: 0.8rem; font-weight: 700;">${CHIP_TYPES[k].val} THB x${v}</span>
                             </div>
                         `).join('')}
                     </div>
                     <div class="row" style="margin-top: 4px;">
-                        <div style="font-size: 1rem; font-weight: 700; color: ${t.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${t.type === 'buy' ? '-' : '+'}$${t.totalVal}</div>
+                        <div style="font-size: 1rem; font-weight: 700; color: ${t.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${t.type === 'buy' ? '-' : '+'}${t.totalVal} THB</div>
                         <div class="row" style="gap: 8px;">
                             <button class="btn-xs btn-approve" onclick="window.resolveTx('${t.id}', true)">Approve</button>
                             <button class="btn-xs btn-reject" onclick="window.resolveTx('${t.id}', false)">Reject</button>
@@ -505,13 +655,19 @@ function renderAdmin() {
         const isSelf = uid === currentPlayerId;
         const isTargetOwner = uid === roomData.ownerId;
 
+        const pBuy = p.history.filter(h => h.type === 'buy' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0);
+        const pReturn = p.history.filter(h => h.type === 'sell' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0);
+        const net = pReturn - pBuy;
+        const formattedNet = (net > 0 ? '+' : '') + net.toLocaleString() + ' THB';
+        const colorStyle = net < 0 ? 'color: var(--accent-alt); font-weight: 600;' : (net > 0 ? 'color: var(--accent); font-weight: 600;' : 'color: var(--text-muted);');
+
         return `
             <div class="row player-list-item">
-                <div class="row" style="gap: 12px; flex: 1;">
+                <div class="row" style="gap: 12px; flex: 1; justify-content: flex-start;">
                     <img src="${p.photoURL || 'https://via.placeholder.com/32'}" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border);">
                     <div class="stack" style="gap: 2px;">
                         <b>${p.name} ${isSelf ? '(You)' : ''}</b>
-                        <span class="text-muted">$${bal.toLocaleString()}</span>
+                        <span style="${colorStyle}">${formattedNet}</span>
                     </div>
                 </div>
                 <div class="row" style="gap: 8px;">
@@ -527,7 +683,7 @@ function renderAdmin() {
     document.getElementById('admin-pool-grid').innerHTML = Object.keys(CHIP_TYPES).map(k => `
         <div class="pool-item">
             <div class="pool-dot bg-${k}"></div>
-            <div style="font-size: 0.7rem;">$${CHIP_TYPES[k].val}</div>
+            <div style="font-size: 0.7rem;">${CHIP_TYPES[k].val} THB</div>
             <b style="font-size: 1.1rem;">${roomData.pool[k]}</b>
         </div>
     `).join('');
@@ -541,7 +697,7 @@ function renderAdmin() {
         gameHistoryEl.innerHTML = '<div class="text-muted" style="text-align: center; padding: 1rem;">No history yet</div>';
     } else {
         gameHistoryEl.innerHTML = roomData.transactions.map(h => {
-            const p = roomData.players[h.playerName] || { name: 'Unknown' };
+            const p = roomData.players[h.playerId] || { name: 'Unknown' };
             return `
                 <div class="stack" style="padding: 0.75rem; border-bottom: 1px solid var(--border); gap: 4px; background: rgba(255,255,255,0.02); border-radius: 8px;">
                     <div class="row">
@@ -549,13 +705,13 @@ function renderAdmin() {
                             <img src="${p.photoURL || 'https://via.placeholder.com/20'}" style="width: 20px; height: 20px; border-radius: 50%;">
                             <span style="font-weight: 600;">${p.name}</span>
                         </div>
-                        <span style="font-weight: 700; color: ${h.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${h.type === 'buy' ? '-' : '+'}$${h.totalVal}</span>
+                        <span style="font-weight: 700; color: ${h.type === 'buy' ? 'var(--accent-alt)' : 'var(--accent)'}">${h.type === 'buy' ? '-' : '+'}${h.totalVal} THB</span>
                     </div>
                     <div class="row" style="gap: 4px; flex-wrap: wrap; justify-content: flex-start;">
                         ${Object.entries(h.chips || {}).filter(([k, v]) => v > 0).map(([k, v]) => `
                             <div class="row" style="gap: 4px; padding: 2px 6px; border-radius: 4px;">
                                 <div class="chip-circle bg-${k}" style="width: 10px; height: 10px;"></div>
-                                <span style="font-size: 0.65rem;">$${CHIP_TYPES[k].val} x${v}</span>
+                                <span style="font-size: 0.65rem;">${CHIP_TYPES[k].val} THB x${v}</span>
                             </div>
                         `).join('')}
                         <span class="text-muted" style="margin-left: auto; font-size: 0.6rem;">${h.time}</span>
@@ -587,7 +743,7 @@ async function processTx(type) {
     const details = Object.keys(playerCart).filter(k => playerCart[k] > 0).map(k => `${playerCart[k]}x ${k}`).join(', ');
 
     const newPending = [...roomData.pendingTransactions, {
-        id: tid, playerName: currentPlayerId, type, totalVal, details, chips: { ...playerCart }, time: new Date().toLocaleTimeString()
+        id: tid, playerId: currentPlayerId, type, totalVal, details, chips: { ...playerCart }, time: new Date().toLocaleTimeString()
     }];
 
     await updateDoc(doc(db, "games", currentRoomId), { pendingTransactions: newPending });
@@ -610,10 +766,10 @@ window.resolveTx = async (tid, approve) => {
         for (let k in tx.chips) {
             if (tx.type === 'buy') {
                 updatedPool[k] -= tx.chips[k];
-                updatedPlayers[tx.playerName].inventory[k] += tx.chips[k];
+                updatedPlayers[tx.playerId].inventory[k] += tx.chips[k];
             } else {
                 updatedPool[k] += tx.chips[k];
-                updatedPlayers[tx.playerName].inventory[k] -= tx.chips[k];
+                updatedPlayers[tx.playerId].inventory[k] -= tx.chips[k];
             }
         }
         tx.status = 'approved';
@@ -621,7 +777,7 @@ window.resolveTx = async (tid, approve) => {
         tx.status = 'rejected';
     }
 
-    updatedPlayers[tx.playerName].history.push(tx);
+    updatedPlayers[tx.playerId].history.push(tx);
     await updateDoc(updatedRef, {
         pendingTransactions: newPending,
         players: updatedPlayers,
@@ -646,12 +802,135 @@ window.transferOwnership = async (targetUid) => {
 
 window.finishGame = async () => {
     if (!isOwner) return;
-    const confirmed = await showConfirm("Finish Game", "Are you sure you want to end the game and clear all data? This will disconnect all players and cannot be undone.");
-    if (confirmed) {
+    const confirmed = await showConfirm("Finish Game", "Are you sure you want to end the game and generate the final Player Status Summary? This will prepare the receipt image.");
+    if (!confirmed) return;
+
+    // Calculate final metrics
+    const totalBuy = Object.values(roomData.players).reduce((sum, p) => sum + p.history.filter(h => h.type === 'buy' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0), 0);
+    const totalReturn = Object.values(roomData.players).reduce((sum, p) => sum + p.history.filter(h => h.type === 'sell' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0), 0);
+    
+    // Fill the hidden summary template
+    document.getElementById('summary-room-id').textContent = currentRoomId;
+    document.getElementById('summary-date').textContent = new Date().toLocaleString();
+    document.getElementById('summary-total-buy').textContent = `${totalBuy.toLocaleString()} THB`;
+    document.getElementById('summary-total-return').textContent = `${totalReturn.toLocaleString()} THB`;
+    
+    const playersListEl = document.getElementById('summary-players-list');
+    playersListEl.innerHTML = Object.values(roomData.players).map(p => {
+        const pBuy = p.history.filter(h => h.type === 'buy' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0);
+        const pReturn = p.history.filter(h => h.type === 'sell' && h.status === 'approved').reduce((s, h) => s + h.totalVal, 0);
+        const net = pReturn - pBuy;
+        const formattedNet = (net > 0 ? '+' : '') + net.toLocaleString() + ' THB';
+        const color = net < 0 ? '#f43f5e' : (net > 0 ? '#10b981' : '#a1a1aa');
+        
+        return `
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                <span style="font-weight: 500;">${p.name}</span>
+                <strong style="color: ${color};">${formattedNet}</strong>
+            </div>
+        `;
+    }).join('');
+
+    const template = document.getElementById('summary-card-template');
+    
+    try {
+        const canvas = await html2canvas(template, {
+            backgroundColor: '#0a0a0c',
+            scale: 2
+        });
+        const imgData = canvas.toDataURL('image/png');
+        
+        // Show in modal
+        const modal = document.getElementById('modal-backdrop');
+        document.getElementById('modal-title').textContent = 'Game Standing Summary';
+        
+        const bodyHtml = `
+            <div class="stack" style="gap: 1rem; padding: 1rem 0; align-items: center;">
+                <p class="text-muted" style="text-align: center; margin: 0;">Here is the generated summary receipt:</p>
+                <div style="width: 100%; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #0a0a0c;">
+                    <img src="${imgData}" style="width: 100%; display: block; height: auto;">
+                </div>
+                <button id="btn-download-receipt" class="btn btn-primary" style="background: var(--accent); color: black;">
+                    Download Receipt Image
+                </button>
+                <p style="font-size: 0.75rem; color: var(--accent-alt); text-align: center; font-weight: 600; margin: 0;">
+                    Warning: Clicking "Confirm End Game" will delete the room permanently from Firebase.
+                </p>
+            </div>
+        `;
+        document.getElementById('modal-body').innerHTML = bodyHtml;
+        
+        const okBtn = document.getElementById('modal-ok');
+        const cancelBtn = document.getElementById('modal-cancel');
+        
+        okBtn.textContent = 'Confirm End Game';
+        okBtn.className = 'btn btn-primary';
+        okBtn.style.background = 'var(--accent-alt)';
+        okBtn.style.color = 'white';
+        okBtn.style.display = 'block';
+        
+        cancelBtn.innerHTML = '&times;';
+        cancelBtn.className = '';
+        
+        const handleDownload = () => {
+            const link = document.createElement('a');
+            link.download = `gogo-summary-${currentRoomId}.png`;
+            link.href = imgData;
+            link.click();
+        };
+        
+        const handleConfirmEnd = async () => {
+            modal.style.display = 'none';
+            okBtn.removeEventListener('click', handleConfirmEnd);
+            cancelBtn.removeEventListener('click', handleCancel);
+            document.getElementById('btn-download-receipt').removeEventListener('click', handleDownload);
+            
+            await deleteDoc(doc(db, "games", currentRoomId));
+            location.reload();
+        };
+        
+        const handleCancel = () => {
+            modal.style.display = 'none';
+            okBtn.removeEventListener('click', handleConfirmEnd);
+            cancelBtn.removeEventListener('click', handleCancel);
+            document.getElementById('btn-download-receipt').removeEventListener('click', handleDownload);
+            
+            // Restore default modal buttons
+            okBtn.textContent = 'Save';
+            okBtn.style.background = '';
+            okBtn.style.color = '';
+        };
+        
+        document.getElementById('btn-download-receipt').addEventListener('click', handleDownload);
+        okBtn.addEventListener('click', handleConfirmEnd);
+        cancelBtn.addEventListener('click', handleCancel);
+        
+        modal.style.display = 'flex';
+    } catch (err) {
+        console.error("Image generation failed", err);
+        alert("Failed to generate receipt image. Ending game directly.");
         await deleteDoc(doc(db, "games", currentRoomId));
         location.reload();
     }
 };
+
+function validateDisplayName(name) {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+        alert("Display name cannot be blank.");
+        return false;
+    }
+    if (name.length > 20) {
+        alert("Display name must be maximum 20 characters.");
+        return false;
+    }
+    const regex = /^[a-zA-Z0-9 ]+$/;
+    if (!regex.test(name)) {
+        alert("Display name can only contain letters, numbers, and spaces.");
+        return false;
+    }
+    return true;
+}
 
 function calculateBalance(inventory) {
     return Object.keys(CHIP_TYPES).reduce((sum, key) => sum + (inventory[key] * CHIP_TYPES[key].val), 0);
@@ -672,6 +951,19 @@ function showConfirm(title, message) {
         
         const okBtn = document.getElementById('modal-ok');
         const cancelBtn = document.getElementById('modal-cancel');
+        
+        // Reset styles and visibility modified by other modal views
+        okBtn.style.display = '';
+        okBtn.textContent = 'OK';
+        okBtn.className = 'btn btn-primary';
+        okBtn.style.background = '';
+        okBtn.style.color = '';
+        
+        cancelBtn.style.display = '';
+        cancelBtn.innerHTML = '&times;';
+        cancelBtn.className = '';
+        cancelBtn.style.background = '';
+        cancelBtn.style.color = '';
         
         const onOk = () => cleanup(true);
         const onCancel = () => cleanup(false);
@@ -705,7 +997,8 @@ document.getElementById('btn-execute-sell').addEventListener('click', () => proc
 document.getElementById('btn-finish-game').addEventListener('click', () => window.finishGame());
 
 // Handle settings
-document.getElementById('btn-settings').addEventListener('click', async () => {
+// Function to open settings modal
+async function openSettingsModal() {
     const modal = document.getElementById('modal-backdrop');
     document.getElementById('modal-title').textContent = 'Room Settings';
     
@@ -714,32 +1007,37 @@ document.getElementById('btn-settings').addEventListener('click', async () => {
             <div class="stack" style="gap: 0.5rem;">
                 <label class="text-muted" style="font-size: 0.8rem;">Change Display Name</label>
                 <div class="row" style="gap: 0.5rem;">
-                    <input type="text" id="new-display-name" value="${currentUser.displayName}" style="flex: 1; height: 40px; padding: 0 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: white;">
-                    <button id="btn-update-name" class="btn btn-primary" style="height: 40px; padding: 0 1rem; font-size: 0.8rem;">Update</button>
+                    <input type="text" id="new-display-name" value="${currentUser.displayName}" maxlength="20" style="flex: 1; height: 40px; padding: 0 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: white;">
+                    <button id="btn-update-name" class="btn btn-primary" style="height: 40px; padding: 0 1rem; font-size: 0.8rem; width: auto; flex: none;">Update</button>
                 </div>
             </div>
             <hr style="border: 0; border-top: 1px solid var(--border);">
             <div class="stack" style="gap: 0.5rem;">
                 <label class="text-muted" style="font-size: 0.8rem;">Sign Out</label>
-                <button onclick="auth.signOut().then(() => location.reload())" class="btn-reject" style="padding: 0.75rem; border-radius: 12px; border: 1px solid var(--accent-alt); background: rgba(244, 63, 94, 0.05); cursor: pointer;">Sign Out of Account</button>
+                <button id="btn-settings-signout" class="btn-reject" style="padding: 0.75rem; border-radius: 12px; border: 1px solid var(--accent-alt); background: rgba(244, 63, 94, 0.05); cursor: pointer; width: 100%;">Sign Out of Account</button>
             </div>
         </div>
     `;
     
     document.getElementById('modal-body').innerHTML = bodyHtml;
     document.getElementById('modal-ok').style.display = 'none'; // Hide Save button, use inline Update
-    document.getElementById('modal-cancel').textContent = 'Close';
+    document.getElementById('modal-cancel').innerHTML = '&times;';
     
     modal.style.display = 'flex';
 
+    document.getElementById('modal-cancel').addEventListener('click', () => {
+        modal.style.display = 'none';
+    }, { once: true });
+
     document.getElementById('btn-update-name').addEventListener('click', async () => {
-        const newName = document.getElementById('new-display-name').value.trim();
-        if (!newName) return;
+        const newName = document.getElementById('new-display-name').value;
+        if (!validateDisplayName(newName)) return;
         
+        const trimmed = newName.trim();
         try {
             // Update Global Profile
-            await setDoc(doc(db, "users", currentUser.uid), { displayName: newName }, { merge: true });
-            currentUser.displayName = newName;
+            await setDoc(doc(db, "users", currentUser.uid), { displayName: trimmed }, { merge: true });
+            currentUser.displayName = trimmed;
             
             // Update Room Player Map
             if (currentRoomId && roomData) {
@@ -749,6 +1047,10 @@ document.getElementById('btn-settings').addEventListener('click', async () => {
                 await updateDoc(roomRef, { players: updatedPlayers });
             }
             
+            // Update Dropdown display name
+            const dropdownUserNameEl = document.getElementById('dropdown-user-name');
+            if (dropdownUserNameEl) dropdownUserNameEl.textContent = newName;
+            
             alert("Name updated successfully!");
             modal.style.display = 'none';
         } catch (e) {
@@ -756,7 +1058,46 @@ document.getElementById('btn-settings').addEventListener('click', async () => {
             alert("Failed to update name.");
         }
     });
-});
+
+    document.getElementById('btn-settings-signout').addEventListener('click', () => {
+        auth.signOut().then(() => location.reload());
+    });
+}
+
+// Dropdown menu setup
+const profileTrigger = document.getElementById('profile-menu-trigger');
+const profileDropdown = document.getElementById('profile-dropdown-menu');
+
+if (profileTrigger && profileDropdown) {
+    profileTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isShown = profileDropdown.classList.contains('show');
+        if (isShown) {
+            profileDropdown.classList.remove('show');
+            setTimeout(() => { profileDropdown.style.display = 'none'; }, 200);
+        } else {
+            profileDropdown.style.display = 'flex';
+            setTimeout(() => { profileDropdown.classList.add('show'); }, 10);
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!profileDropdown.contains(e.target) && e.target !== profileTrigger) {
+            profileDropdown.classList.remove('show');
+            setTimeout(() => { profileDropdown.style.display = 'none'; }, 200);
+        }
+    });
+
+    document.getElementById('btn-menu-settings').addEventListener('click', () => {
+        profileDropdown.classList.remove('show');
+        profileDropdown.style.display = 'none';
+        openSettingsModal();
+    });
+
+    document.getElementById('btn-menu-logout').addEventListener('click', () => {
+        auth.signOut().then(() => location.reload());
+    });
+}
 
 document.getElementById('modal-ok').addEventListener('click', () => {
     document.getElementById('modal-backdrop').style.display = 'none';

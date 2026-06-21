@@ -14,3 +14,10 @@ Output/
 test.html
 node_modules/
 .env
+
+# Playwright
+playwright-report/
+test-results/
+
+# Obsidian
+.obsidian/
